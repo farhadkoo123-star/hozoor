@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سیستم حضور و غیاب</title>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .header h1 { color: #667eea; margin-bottom: 10px; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .stat-card h3 { color: #666; font-size: 14px; margin-bottom: 10px; }
+        .stat-card .number { font-size: 32px; font-weight: bold; }
+        .stat-card.total .number { color: #667eea; }
+        .stat-card.present .number { color: #48bb78; }
+        .stat-card.absent .number { color: #f56565; }
+        .upload-section, .scanner-section, .list-section {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+        .upload-section h2, .scanner-section h2, .list-section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        .file-input-wrapper, .button-group, .manual-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        input[type="file"] { display: none; }
+        .file-label {
+            flex: 1;
+            min-width: 180px;
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        .file-label:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+        }
+        #reader, #nativeWrap {
+            border: 3px solid #667eea;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            min-height: 220px;
+            background: #f7fafc;
+        }
+        #nativeVideo {
+            width: 100%;
+            max-height: 320px;
+            display: block;
+            background: #111;
+        }
+        button {
+            flex: 1;
+            min-width: 120px;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5568d3; transform: translateY(-2px); }
+        .btn-danger { background: #f56565; color: white; }
+        .btn-danger:hover { background: #e53e3e; transform: translateY(-2px); }
+        .btn-success { background: #48bb78; color: white; }
+        .btn-success:hover { background: #38a169; transform: translateY(-2px); }
+        .btn-info { background: #4299e1; color: white; }
+        .btn-info:hover { background: #3182ce; transform: translateY(-2px); }
+        .list-container { max-height: 400px; overflow-y: auto; }
+        .person-item {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+        .person-item.present { border-right: 4px solid #48bb78; background: #c6f6d5; }
+        .person-item.absent { border-right: 4px solid #f56565; }
+        .person-info { flex: 1; }
+        .person-info strong { color: #2d3748; font-size: 16px; }
+        .person-info .details { color: #718096; font-size: 14px; margin-top: 5px; }
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        .status-badge.present { background: #48bb78; color: white; }
+        .status-badge.absent { background: #f56565; color: white; }
+        .tiny-btn {
+            flex: 0;
+            min-width: auto;
+            padding: 6px 10px;
+            font-size: 12px;
+        }
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .success { background: #c6f6d5; color: #22543d; }
+        .error { background: #fed7d7; color: #742a2a; }
+        .info { background: #bee3f8; color: #2c5282; }
+        .warning { background: #fef5e7; color: #7a5c00; }
+        .hint-box {
+            margin-top: 15px;
+            padding: 15px;
+            background: #edf2f7;
+            border-radius: 8px;
+        }
+        .manual-row input[type="text"] {
+            flex: 1;
+            min-width: 160px;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+        @media (max-width: 1024px) {
+            .main-content { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>سیستم حضور و غیاب</h1>
+            <p>ابتدا لیست افراد را بارگزاری کنید، سپس با اسکن QR Code حضور بزنید</p>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card total">
+                <h3>کل افراد</h3>
+                <div class="number" id="totalCount">0</div>
+            </div>
+            <div class="stat-card present">
+                <h3>حاضرین</h3>
+                <div class="number" id="presentCount">0</div>
+            </div>
+            <div class="stat-card absent">
+                <h3>غایبین</h3>
+                <div class="number" id="absentCount">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>زمان فعلی</h3>
+                <div class="number" id="currentTime"></div>
+            </div>
+        </div>
+
+        <div class="upload-section">
+            <h2>بارگزاری لیست افراد</h2>
+            <div class="file-input-wrapper">
+                <input type="file" id="fileInput" accept=".json,.csv,.txt,text/plain,application/json,text/csv">
+                <label for="fileInput" class="file-label">انتخاب فایل (JSON, CSV, TXT)</label>
+                <button type="button" class="btn-info" id="sampleBtn">لیست نمونه</button>
+                <button type="button" class="btn-danger" id="clearBtn">پاک کردن لیست</button>
+            </div>
+            <div class="manual-row">
+                <input type="text" id="manualName" placeholder="افزودن دستی نام...">
+                <button type="button" class="btn-success" id="addManualBtn">افزودن</button>
+            </div>
+            <div id="uploadMessage"></div>
+            <div class="hint-box">
+                <strong>فرمت فایل:</strong>
+                <ul style="margin-top: 10px; margin-right: 20px;">
+                    <li><strong>JSON:</strong> [{"name":"علی احمدی"}] یا ["علی احمدی"] یا {"people":[...]}</li>
+                    <li><strong>CSV:</strong> ستون نام (با یا بدون هدر)</li>
+                    <li><strong>TXT:</strong> یک نام در هر خط</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="scanner-section">
+                <h2>اسکنر QR Code</h2>
+                <div id="reader"></div>
+                <div id="nativeWrap" style="display:none;">
+                    <video id="nativeVideo" autoplay playsinline muted></video>
+                </div>
+                <div class="button-group">
+                    <button type="button" class="btn-primary" id="startScanBtn">شروع اسکن</button>
+                    <button type="button" class="btn-danger" id="stopScanBtn">توقف اسکن</button>
+                </div>
+                <div class="button-group">
+                    <input type="file" id="qrImageInput" accept="image/*">
+                    <label for="qrImageInput" class="file-label">اسکن از روی عکس</label>
+                </div>
+                <div id="message"></div>
+            </div>
+
+            <div class="list-section">
+                <h2>حاضرین</h2>
+                <div class="button-group">
+                    <button type="button" class="btn-success" id="exportPresentBtn">خروجی حاضرین</button>
+                </div>
+                <div class="list-container" id="presentList"></div>
+            </div>
+
+            <div class="list-section">
+                <h2>غایبین</h2>
+                <div class="button-group">
+                    <button type="button" class="btn-danger" id="exportAbsentBtn">خروجی غایبین</button>
+                </div>
+                <div class="list-container" id="absentList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            var html5QrCode = null;
+            var allPersons = [];
+            var isScanning = false;
+            var scanMode = null;
+            var nativeStream = null;
+            var nativeTimer = null;
+            var lastScanKey = '';
+            var lastScanAt = 0;
+
+            function $(id) { return document.getElementById(id); }
+
+            function updateTime() {
+                var now = new Date();
+                $('currentTime').textContent = now.toLocaleTimeString('fa-IR', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+            setInterval(updateTime, 1000);
+            updateTime();
+
+            function playBeep(ok) {
+                try {
+                    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    var osc = ctx.createOscillator();
+                    var gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.value = ok ? 880 : 220;
+                    gain.gain.value = 0.08;
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    setTimeout(function () {
+                        osc.stop();
+                        ctx.close();
+                    }, ok ? 180 : 320);
+                } catch (e) {}
+            }
+
+            function normalizeName(name) {
+                return String(name || '')
+                    .replace(/^\uFEFF/, '')
+                    .replace(/[\u200c\u200f\u202a-\u202e]/g, '')
+                    .trim()
+                    .replace(/\s+/g, ' ')
+                    .toLowerCase();
+            }
+
+            function extractNameValue(item) {
+                if (item == null) return '';
+                if (typeof item === 'string' || typeof item === 'number') return String(item).trim();
+                if (typeof item !== 'object') return '';
+                var keys = ['name', 'fullname', 'fullName', 'full_name', 'person', 'user',
+                    'نام', 'نام و نام خانوادگی', 'نام‌ونام‌خانوادگی', 'اسم'];
+                var i, k, first, last;
+                for (i = 0; i < keys.length; i++) {
+                    k = keys[i];
+                    if (item[k] != null && String(item[k]).trim()) return String(item[k]).trim();
+                }
+                first = item.firstName || item.first_name || item.firstname || item['نام'] || '';
+                last = item.lastName || item.last_name || item.lastname || item['نام خانوادگی'] || '';
+                if (String(first).trim() || String(last).trim()) {
+                    return (String(first).trim() + ' ' + String(last).trim()).trim();
+                }
+                return '';
+            }
+
+            function extractNameFromQR(decodedText) {
+                var possibleNames = [];
+                var raw = String(decodedText || '').replace(/^\uFEFF/, '').trim();
+                if (!raw) return possibleNames;
+
+                try {
+                    var jsonData = JSON.parse(raw);
+                    if (Array.isArray(jsonData)) {
+                        jsonData.forEach(function (it) {
+                            var n = extractNameValue(it);
+                            if (n) possibleNames.push(n);
+                        });
+                    } else {
+                        var n1 = extractNameValue(jsonData);
+                        if (n1) possibleNames.push(n1);
+                    }
+                } catch (e) {}
+
+                possibleNames.push(raw);
+
+                try {
+                    var url = new URL(raw);
+                    var params = url.searchParams;
+                    ['name', 'fullname', 'fullName', 'person', 'user', 'n'].forEach(function (key) {
+                        if (params.get(key)) possibleNames.push(params.get(key));
+                    });
+                    var pathParts = url.pathname.split('/').filter(Boolean);
+                    if (pathParts.length) possibleNames.push(decodeURIComponent(pathParts[pathParts.length - 1]));
+                } catch (e2) {}
+
+                if (raw.indexOf('=') !== -1) {
+                    raw.split(/[&,;\n]/).forEach(function (part) {
+                        var bits = part.split('=');
+                        if (bits.length >= 2) {
+                            var key = bits[0].toLowerCase();
+                            var value = bits.slice(1).join('=');
+                            if (key.indexOf('name') !== -1 || key.indexOf('person') !== -1 || key.indexOf('user') !== -1 || key.indexOf('نام') !== -1) {
+                                possibleNames.push(value);
+                            }
+                        }
+                    });
+                }
+
+                return possibleNames
+                    .filter(function (name) { return name && String(name).trim(); })
+                    .map(function (name) { return String(name).trim(); });
+            }
+
+            function findPersonByName(possibleNames) {
+                var i, testName, normalizedTestName, person;
+                for (i = 0; i < possibleNames.length; i++) {
+                    testName = possibleNames[i];
+                    normalizedTestName = normalizeName(testName);
+                    if (!normalizedTestName) continue;
+
+                    person = allPersons.find(function (p) {
+                        return normalizeName(p.name) === normalizedTestName;
+                    });
+                    if (person) return person;
+
+                    person = allPersons.find(function (p) {
+                        var pn = normalizeName(p.name);
+                        return pn.indexOf(normalizedTestName) !== -1 || normalizedTestName.indexOf(pn) !== -1;
+                    });
+                    if (person) return person;
+                }
+                return null;
+            }
+
+            function uniquePersons(list) {
+                var seen = {};
+                var out = [];
+                list.forEach(function (p) {
+                    var key = normalizeName(p.name);
+                    if (!key || seen[key]) return;
+                    seen[key] = true;
+                    out.push(p);
+                });
+                return out;
+            }
+
+            function applyPersons(names) {
+                allPersons = uniquePersons(names.map(function (name) {
+                    return { name: String(name).trim(), present: false, time: null };
+                }).filter(function (p) { return p.name; }));
+                updateAllLists();
+                if (allPersons.length === 0) {
+                    showUploadMessage('هیچ نام معتبری در فایل پیدا نشد', 'error');
+                    return false;
+                }
+                showUploadMessage(allPersons.length + ' نفر با موفقیت بارگزاری شد', 'success');
+                return true;
+            }
+
+            function looksLikeHeader(value) {
+                var n = normalizeName(value);
+                return n === 'name' || n === 'fullname' || n === 'full name' || n === 'نام' ||
+                    n === 'نام و نام خانوادگی' || n === 'اسم' || n === 'person' || n === 'user';
+            }
+
+            function parseJSONContent(content) {
+                var data = JSON.parse(content);
+                var rows = [];
+                if (Array.isArray(data)) {
+                    rows = data;
+                } else if (data && typeof data === 'object') {
+                    if (Array.isArray(data.people)) rows = data.people;
+                    else if (Array.isArray(data.persons)) rows = data.persons;
+                    else if (Array.isArray(data.data)) rows = data.data;
+                    else if (Array.isArray(data.items)) rows = data.items;
+                    else if (Array.isArray(data.list)) rows = data.list;
+                    else rows = [data];
+                } else {
+                    throw new Error('ساختار JSON پشتیبانی نمی‌شود');
+                }
+                var names = rows.map(extractNameValue).filter(Boolean);
+                if (!applyPersons(names)) throw new Error('در JSON نام معتبری نبود');
+            }
+
+            function parseTextContent(content) {
+                var text = String(content || '').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+                if (!text) throw new Error('فایل خالی است');
+
+                var names = [];
+                if (text.indexOf(',') !== -1 || text.indexOf(';') !== -1 || text.indexOf('\t') !== -1) {
+                    var lines = text.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+                    var delim = (text.indexOf('\t') !== -1) ? '\t' : ((text.indexOf(';') !== -1) ? ';' : ',');
+                    var start = 0;
+                    var firstCells = lines[0].split(delim).map(function (c) { return c.replace(/^["']|["']$/g, '').trim(); });
+                    var nameCol = 0;
+                    var hi;
+                    for (hi = 0; hi < firstCells.length; hi++) {
+                        if (looksLikeHeader(firstCells[hi])) {
+                            nameCol = hi;
+                            start = 1;
+                            break;
+                        }
+                    }
+                    if (start === 0 && firstCells.length > 1 && looksLikeHeader(firstCells.join(' '))) start = 1;
+                    var li, cells, val;
+                    for (li = start; li < lines.length; li++) {
+                        cells = lines[li].split(delim).map(function (c) { return c.replace(/^["']|["']$/g, '').trim(); });
+                        val = cells[nameCol] || cells[0] || '';
+                        if (val) names.push(val);
+                    }
+                } else {
+                    names = text.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+                }
+                if (names.length && looksLikeHeader(names[0]) && names.length > 1) names.shift();
+                if (!applyPersons(names)) throw new Error('در فایل نام معتبری نبود');
+            }
+
+            function loadFile() {
+                var fileInput = $('fileInput');
+                var file = fileInput.files && fileInput.files[0];
+                if (!file) {
+                    showUploadMessage('فایلی انتخاب نشد', 'error');
+                    return;
+                }
+                var reader = new FileReader();
+                reader.onload = function (e) {
+                    var content = String(e.target.result || '').replace(/^\uFEFF/, '');
+                    var extension = (file.name.split('.').pop() || '').toLowerCase();
+                    try {
+                        var trimmed = content.trim();
+                        if (!trimmed) throw new Error('فایل خالی است');
+                        if (extension === 'json' || trimmed.charAt(0) === '{' || trimmed.charAt(0) === '[') {
+                            parseJSONContent(trimmed);
+                        } else {
+                            parseTextContent(trimmed);
+                        }
+                    } catch (error) {
+                        if (extension === 'json') {
+                            showUploadMessage('خطا در خواندن فایل: ' + error.message, 'error');
+                        } else {
+                            try {
+                                parseTextContent(content);
+                            } catch (error2) {
+                                showUploadMessage('خطا در خواندن فایل: ' + error.message, 'error');
+                            }
+                        }
+                    }
+                    fileInput.value = '';
+                };
+                reader.onerror = function () {
+                    showUploadMessage('خواندن فایل ناموفق بود', 'error');
+                    fileInput.value = '';
+                };
+                reader.readAsText(file, 'UTF-8');
+            }
+
+            function addManualName() {
+                var input = $('manualName');
+                var name = (input.value || '').trim();
+                if (!name) {
+                    showUploadMessage('نام را وارد کنید', 'error');
+                    return;
+                }
+                if (allPersons.some(function (p) { return normalizeName(p.name) === normalizeName(name); })) {
+                    showUploadMessage('این نام قبلاً در لیست است', 'error');
+                    return;
+                }
+                allPersons.push({ name: name, present: false, time: null });
+                input.value = '';
+                updateAllLists();
+                showUploadMessage('«' + name + '» اضافه شد', 'success');
+            }
+
+            function loadSample() {
+                applyPersons(['علی احمدی', 'زهرا محمدی', 'رضا کریمی', 'مریم حسینی']);
+            }
+
+            function clearList() {
+                if (!allPersons.length) {
+                    showUploadMessage('لیست خالی است', 'info');
+                    return;
+                }
+                if (confirm('آیا مطمئن هستید که می‌خواهید لیست را پاک کنید؟')) {
+                    allPersons = [];
+                    updateAllLists();
+                    showUploadMessage('لیست پاک شد', 'info');
+                }
+            }
+
+            function updateAllLists() {
+                updateStats();
+                updatePresentList();
+                updateAbsentList();
+            }
+
+            function updateStats() {
+                var total = allPersons.length;
+                var present = allPersons.filter(function (p) { return p.present; }).length;
+                $('totalCount').textContent = total;
+                $('presentCount').textContent = present;
+                $('absentCount').textContent = total - present;
+            }
+
+            function updatePresentList() {
+                var presentList = $('presentList');
+                var presentPersons = allPersons.filter(function (p) { return p.present; });
+                presentList.innerHTML = '';
+                if (!presentPersons.length) {
+                    presentList.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">هنوز کسی حاضر نشده</div>';
+                    return;
+                }
+                presentPersons.forEach(function (person) {
+                    var itemDiv = document.createElement('div');
+                    itemDiv.className = 'person-item present';
+                    itemDiv.innerHTML =
+                        '<div class="person-info"><div><strong></strong></div>' +
+                        '<div class="details"></div></div>' +
+                        '<span class="status-badge present">حاضر</span>';
+                    itemDiv.querySelector('strong').textContent = person.name;
+                    itemDiv.querySelector('.details').textContent = 'زمان: ' + (person.time || '-');
+                    presentList.appendChild(itemDiv);
+                });
+            }
+
+            function updateAbsentList() {
+                var absentList = $('absentList');
+                var absentPersons = allPersons.filter(function (p) { return !p.present; });
+                absentList.innerHTML = '';
+                if (!absentPersons.length) {
+                    absentList.innerHTML = allPersons.length
+                        ? '<div style="text-align:center;color:#999;padding:20px;">همه حاضر شدند</div>'
+                        : '<div style="text-align:center;color:#999;padding:20px;">لیست خالی است</div>';
+                    return;
+                }
+                absentPersons.forEach(function (person, idx) {
+                    var itemDiv = document.createElement('div');
+                    itemDiv.className = 'person-item absent';
+                    var info = document.createElement('div');
+                    info.className = 'person-info';
+                    var strong = document.createElement('div');
+                    var b = document.createElement('strong');
+                    b.textContent = person.name;
+                    strong.appendChild(b);
+                    info.appendChild(strong);
+                    var badge = document.createElement('span');
+                    badge.className = 'status-badge absent';
+                    badge.textContent = 'غایب';
+                    var markBtn = document.createElement('button');
+                    markBtn.type = 'button';
+                    markBtn.className = 'btn-success tiny-btn';
+                    markBtn.textContent = 'حضور';
+                    markBtn.addEventListener('click', function () {
+                        markPresent(person, 'دستی');
+                    });
+                    itemDiv.appendChild(info);
+                    itemDiv.appendChild(markBtn);
+                    itemDiv.appendChild(badge);
+                    absentList.appendChild(itemDiv);
+                });
+            }
+
+            function markPresent(person, source) {
+                if (!person) return false;
+                if (person.present) {
+                    showMessage(person.name + ' قبلاً حاضر شده است', 'error');
+                    playBeep(false);
+                    return false;
+                }
+                person.present = true;
+                person.time = new Date().toLocaleString('fa-IR');
+                updateAllLists();
+                showMessage(person.name + ' با موفقیت حاضر شد' + (source ? ' (' + source + ')' : ''), 'success');
+                playBeep(true);
+                return true;
+            }
+
+            function handleDecodedText(decodedText) {
+                var now = Date.now();
+                var key = String(decodedText || '');
+                if (key && key === lastScanKey && (now - lastScanAt) < 2500) return;
+                lastScanKey = key;
+                lastScanAt = now;
+
+                var possibleNames = extractNameFromQR(decodedText);
+                if (!possibleNames.length) {
+                    showMessage('نام در QR Code یافت نشد', 'error');
+                    playBeep(false);
+                    return;
+                }
+                var person = findPersonByName(possibleNames);
+                if (!person) {
+                    showMessage('این نام در لیست نیست: ' + possibleNames.slice(0, 3).join('، '), 'error');
+                    playBeep(false);
+                    return;
+                }
+                markPresent(person, 'اسکن');
+            }
+
+            function friendlyCameraError(err) {
+                var name = err && (err.name || err.type) ? String(err.name || err.type) : '';
+                var msg = String((err && (err.message || err)) || '');
+                if (location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                    return 'برای استفاده از دوربین صفحه باید روی HTTPS یا localhost باز شود.';
+                }
+                if (name === 'NotAllowedError' || /permission/i.test(msg)) {
+                    return 'دسترسی به دوربین رد شد. در تنظیمات مرورگر اجازه دوربین را فعال کنید.';
+                }
+                if (name === 'NotFoundError' || name === 'DevicesNotFoundError' || /no camera|not found/i.test(msg)) {
+                    return 'هیچ دوربینی روی این دستگاه یافت نشد. می‌توانید از «اسکن از روی عکس» استفاده کنید.';
+                }
+                if (name === 'NotReadableError' || name === 'TrackStartError' || /in use|readable/i.test(msg)) {
+                    return 'دوربین در دسترس نیست یا برنامه دیگری از آن استفاده می‌کند.';
+                }
+                if (name === 'OverconstrainedError') {
+                    return 'این دوربین با تنظیمات درخواستی سازگار نیست.';
+                }
+                if (typeof Html5Qrcode === 'undefined' && !('BarcodeDetector' in window) && !navigator.mediaDevices) {
+                    return 'کتابخانه اسکنر بارگذاری نشد و این مرورگر اسکن داخلی ندارد. اتصال اینترنت را بررسی کنید یا از اسکن عکس استفاده کنید.';
+                }
+                return 'خطا در شروع دوربین: ' + (msg || name || 'نامشخص');
+            }
+
+            function hasHtml5Qrcode() {
+                return typeof Html5Qrcode === 'function';
+            }
+
+            async function resetHtml5Instance() {
+                if (!html5QrCode) return;
+                try { await html5QrCode.stop(); } catch (e1) {}
+                try { await html5QrCode.clear(); } catch (e2) {}
+                html5QrCode = null;
+                var reader = $('reader');
+                reader.innerHTML = '';
+            }
+
+            async function stopNativeScanner() {
+                if (nativeTimer) {
+                    clearInterval(nativeTimer);
+                    nativeTimer = null;
+                }
+                if (nativeStream) {
+                    nativeStream.getTracks().forEach(function (t) { t.stop(); });
+                    nativeStream = null;
+                }
+                var video = $('nativeVideo');
+                if (video) video.srcObject = null;
+                $('nativeWrap').style.display = 'none';
+            }
+
+            async function startNativeScanner() {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('این مرورگر دسترسی به دوربین را پشتیبانی نمی‌کند');
+                }
+                $('reader').style.display = 'none';
+                $('nativeWrap').style.display = 'block';
+                var constraintsList = [
+                    { video: { facingMode: { ideal: 'environment' } }, audio: false },
+                    { video: { facingMode: 'user' }, audio: false },
+                    { video: true, audio: false }
+                ];
+                var lastErr = null;
+                var i;
+                for (i = 0; i < constraintsList.length; i++) {
+                    try {
+                        nativeStream = await navigator.mediaDevices.getUserMedia(constraintsList[i]);
+                        lastErr = null;
+                        break;
+                    } catch (err) {
+                        lastErr = err;
+                    }
+                }
+                if (!nativeStream) throw lastErr || new Error('دوربین شروع نشد');
+
+                var video = $('nativeVideo');
+                video.srcObject = nativeStream;
+                await video.play();
+
+                if ('BarcodeDetector' in window) {
+                    var detector = new BarcodeDetector({ formats: ['qr_code', 'aztec', 'data_matrix', 'pdf417'] });
+                    nativeTimer = setInterval(function () {
+                        detector.detect(video).then(function (codes) {
+                            if (codes && codes[0] && codes[0].rawValue) handleDecodedText(codes[0].rawValue);
+                        }).catch(function () {});
+                    }, 400);
+                    return 'دوربین فعال شد (اسکن داخلی مرورگر)';
+                }
+
+                throw new Error('اسکن زنده بدون کتابخانه QR ممکن نیست. از «اسکن از روی عکس» استفاده کنید یا اتصال اینترنت را برای بارگذاری کتابخانه بررسی کنید.');
+            }
+
+            async function startHtml5Scanner() {
+                await stopNativeScanner();
+                $('nativeWrap').style.display = 'none';
+                $('reader').style.display = 'block';
+                await resetHtml5Instance();
+
+                var config = { fps: 10, qrbox: { width: 250, height: 250 } };
+                var attempts = [
+                    { camera: { facingMode: 'environment' }, hint: 'دوربین اصلی فعال شد' },
+                    { camera: { facingMode: 'user' }, hint: 'دوربین جلو فعال شد' }
+                ];
+
+                try {
+                    if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                        var cams = (await navigator.mediaDevices.enumerateDevices()).filter(function (d) {
+                            return d.kind === 'videoinput' && d.deviceId;
+                        });
+                        cams.forEach(function (cam) {
+                            attempts.push({ camera: { deviceId: { exact: cam.deviceId } }, hint: 'دوربین فعال شد' });
+                        });
+                    }
+                } catch (e) {}
+
+                var lastErr = null;
+                var i;
+                for (i = 0; i < attempts.length; i++) {
+                    try {
+                        await resetHtml5Instance();
+                        html5QrCode = new Html5Qrcode('reader');
+                        await html5QrCode.start(attempts[i].camera, config, onScanSuccess, onScanError);
+                        return attempts[i].hint;
+                    } catch (err) {
+                        lastErr = err;
+                        var name = err && err.name ? String(err.name) : '';
+                        if (name === 'NotAllowedError' || name === 'SecurityError') break;
+                    }
+                }
+                await resetHtml5Instance();
+                throw lastErr || new Error('دوربین شروع نشد');
+            }
+
+            async function startScanner() {
+                if (!allPersons.length) {
+                    showMessage('ابتدا لیست افراد را بارگزاری کنید یا چند نام اضافه کنید', 'error');
+                    return;
+                }
+                if (isScanning) {
+                    showMessage('اسکنر در حال اجرا است', 'info');
+                    return;
+                }
+
+                try {
+                    if (hasHtml5Qrcode()) {
+                        var hint = await startHtml5Scanner();
+                        isScanning = true;
+                        scanMode = 'html5';
+                        showMessage(hint + ' - QR را روبه‌روی دوربین بگیرید', 'success');
+                        return;
+                    }
+                    var nativeHint = await startNativeScanner();
+                    isScanning = true;
+                    scanMode = 'native';
+                    showMessage(nativeHint, 'success');
+                } catch (err) {
+                    isScanning = false;
+                    scanMode = null;
+                    try { await resetHtml5Instance(); } catch (e1) {}
+                    try { await stopNativeScanner(); } catch (e2) {}
+                    $('reader').style.display = 'block';
+                    showMessage(friendlyCameraError(err), 'error');
+                }
+            }
+
+            async function stopScanner() {
+                if (!isScanning) {
+                    showMessage('اسکنر فعال نیست', 'info');
+                    return;
+                }
+                try {
+                    if (scanMode === 'html5') await resetHtml5Instance();
+                    await stopNativeScanner();
+                    $('reader').style.display = 'block';
+                    isScanning = false;
+                    scanMode = null;
+                    showMessage('اسکنر متوقف شد', 'success');
+                } catch (err) {
+                    isScanning = false;
+                    scanMode = null;
+                    showMessage('اسکنر متوقف شد', 'success');
+                }
+            }
+
+            function onScanSuccess(decodedText) {
+                handleDecodedText(decodedText);
+            }
+
+            function onScanError() {}
+
+            async function scanImageFile(file) {
+                if (!file) return;
+                if (!allPersons.length) {
+                    showMessage('ابتدا لیست افراد را بارگزاری کنید', 'error');
+                    $('qrImageInput').value = '';
+                    return;
+                }
+                try {
+                    if (hasHtml5Qrcode()) {
+                        if (isScanning && scanMode === 'html5') await resetHtml5Instance();
+                        var temp = new Html5Qrcode('reader');
+                        var result = await temp.scanFile(file, true);
+                        try { await temp.clear(); } catch (e) {}
+                        handleDecodedText(result);
+                        $('qrImageInput').value = '';
+                        return;
+                    }
+                    if ('BarcodeDetector' in window) {
+                        var bmp = await createImageBitmap(file);
+                        var detector = new BarcodeDetector({ formats: ['qr_code'] });
+                        var codes = await detector.detect(bmp);
+                        if (codes && codes[0] && codes[0].rawValue) handleDecodedText(codes[0].rawValue);
+                        else showMessage('QR در این تصویر پیدا نشد', 'error');
+                        $('qrImageInput').value = '';
+                        return;
+                    }
+                    showMessage('برای اسکن عکس باید کتابخانه QR بارگذاری شود. اتصال اینترنت را بررسی کنید.', 'error');
+                } catch (err) {
+                    showMessage('خواندن تصویر ناموفق بود: ' + (err && err.message ? err.message : err), 'error');
+                }
+                $('qrImageInput').value = '';
+            }
+
+            function showMessage(text, type) {
+                var messageDiv = $('message');
+                messageDiv.textContent = text;
+                messageDiv.className = 'message ' + type;
+            }
+
+            function showUploadMessage(text, type) {
+                var messageDiv = $('uploadMessage');
+                messageDiv.textContent = text;
+                messageDiv.className = 'message ' + type;
+            }
+
+            function exportPresent() {
+                var presentPersons = allPersons.filter(function (p) { return p.present; });
+                if (!presentPersons.length) {
+                    showMessage('هیچ حاضری ثبت نشده', 'error');
+                    return;
+                }
+                exportToCSV(presentPersons, 'present');
+            }
+
+            function exportAbsent() {
+                var absentPersons = allPersons.filter(function (p) { return !p.present; });
+                if (!absentPersons.length) {
+                    showMessage('هیچ غایبی وجود ندارد', 'error');
+                    return;
+                }
+                exportToCSV(absentPersons, 'absent');
+            }
+
+            function exportToCSV(persons, type) {
+                var csv = 'نام و نام خانوادگی';
+                if (type === 'present') csv += ',زمان حضور';
+                csv += '\n';
+                persons.forEach(function (person) {
+                    csv += person.name;
+                    if (type === 'present' && person.time) csv += ',' + person.time;
+                    csv += '\n';
+                });
+                var filename = type === 'present' ? 'حاضرین.csv' : 'غایبین.csv';
+                downloadFile(csv, filename, 'text/csv;charset=utf-8');
+                showMessage('فایل ' + filename + ' آماده دانلود شد', 'success');
+            }
+
+            function downloadFile(content, filename, contentType) {
+                var BOM = '\uFEFF';
+                var blob = new Blob([BOM + content], { type: contentType });
+                var url = URL.createObjectURL(blob);
+                var link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }
+
+            $('fileInput').addEventListener('change', loadFile);
+            $('sampleBtn').addEventListener('click', loadSample);
+            $('clearBtn').addEventListener('click', clearList);
+            $('addManualBtn').addEventListener('click', addManualName);
+            $('manualName').addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') addManualName();
+            });
+            $('startScanBtn').addEventListener('click', function () { startScanner(); });
+            $('stopScanBtn').addEventListener('click', function () { stopScanner(); });
+            $('exportPresentBtn').addEventListener('click', exportPresent);
+            $('exportAbsentBtn').addEventListener('click', exportAbsent);
+            $('qrImageInput').addEventListener('change', function () {
+                var f = this.files && this.files[0];
+                if (f) scanImageFile(f);
+            });
+
+            updateAllLists();
+        })();
+    </script>
+</body>
+</html>
