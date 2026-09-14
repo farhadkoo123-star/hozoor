@@ -284,21 +284,45 @@
             setInterval(updateTime, 1000);
             updateTime();
 
-            function playBeep(ok) {
+            // سیستم پخش ۳ نوع بوق اختصاصی
+            // type: 'success' (تایید) | 'notFound' (نبودن در لیست) | 'duplicate' (تکراری)
+            function playBeep(type) {
                 try {
-                    var ctx = new (window.AudioContext || window.webkitAudioContext)();
-                    var osc = ctx.createOscillator();
-                    var gain = ctx.createGain();
-                    osc.type = 'sine';
-                    osc.frequency.value = ok ? 880 : 220;
-                    gain.gain.value = 0.08;
-                    osc.connect(gain);
-                    gain.connect(ctx.destination);
-                    osc.start();
-                    setTimeout(function () {
-                        osc.stop();
-                        ctx.close();
-                    }, ok ? 180 : 320);
+                    var AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioContext) return;
+                    var ctx = new AudioContext();
+
+                    function playTone(freq, duration, delay, waveType) {
+                        var osc = ctx.createOscillator();
+                        var gain = ctx.createGain();
+                        osc.type = waveType || 'sine';
+                        osc.frequency.value = freq;
+                        gain.gain.value = 0.12;
+
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+
+                        var startAt = ctx.currentTime + (delay || 0);
+                        osc.start(startAt);
+                        gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+                        osc.stop(startAt + duration);
+                    }
+
+                    if (type === 'success') {
+                        // ۱. بوق تایید: دو نت زیر و شاد (880Hz سپس 1320Hz)
+                        playTone(880, 0.1, 0, 'sine');
+                        playTone(1320, 0.18, 0.11, 'sine');
+                        setTimeout(function () { ctx.close(); }, 400);
+                    } else if (type === 'notFound') {
+                        // ۲. بوق نبودن در لیست: یک بوق بم و ممتد هشداردهنده (200Hz حالت بوزر)
+                        playTone(200, 0.45, 0, 'sawtooth');
+                        setTimeout(function () { ctx.close(); }, 550);
+                    } else if (type === 'duplicate') {
+                        // ۳. بوق تکراری: دو بوق مقطع هشدار (440Hz دو پالس)
+                        playTone(440, 0.12, 0, 'triangle');
+                        playTone(440, 0.12, 0.18, 'triangle');
+                        setTimeout(function () { ctx.close(); }, 450);
+                    }
                 } catch (e) {}
             }
 
@@ -629,15 +653,15 @@
             function markPresent(person, source) {
                 if (!person) return false;
                 if (person.present) {
-                    showMessage(person.name + ' قبلاً حاضر شده است', 'error');
-                    playBeep(false);
+                    showMessage(person.name + ' قبلاً حاضر شده است', 'warning');
+                    playBeep('duplicate'); // ۳. بوق تکرار حضور
                     return false;
                 }
                 person.present = true;
                 person.time = new Date().toLocaleString('fa-IR');
                 updateAllLists();
                 showMessage(person.name + ' با موفقیت حاضر شد' + (source ? ' (' + source + ')' : ''), 'success');
-                playBeep(true);
+                playBeep('success'); // ۱. بوق تایید و ثبت
                 return true;
             }
 
@@ -651,13 +675,13 @@
                 var possibleNames = extractNameFromQR(decodedText);
                 if (!possibleNames.length) {
                     showMessage('نام در QR Code یافت نشد', 'error');
-                    playBeep(false);
+                    playBeep('notFound'); // ۲. بوق نبودن در لیست
                     return;
                 }
                 var person = findPersonByName(possibleNames);
                 if (!person) {
                     showMessage('این نام در لیست نیست: ' + possibleNames.slice(0, 3).join('، '), 'error');
-                    playBeep(false);
+                    playBeep('notFound'); // ۲. بوق نبودن در لیست
                     return;
                 }
                 markPresent(person, 'اسکن');
