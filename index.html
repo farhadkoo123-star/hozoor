@@ -285,40 +285,51 @@ setInterval(updateTime, 1000);
 updateTime();
 
 function playBeep(type) {
-try {
-var AudioContext = window.AudioContext || window.webkitAudioContext;
-if (!AudioContext) return;
-var ctx = new AudioContext();
+    try {
+        var AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        var ctx = new AudioContext();
 
-function playTone(freq, duration, delay, waveType) {
-var osc = ctx.createOscillator();
-var gain = ctx.createGain();
-osc.type = waveType || 'sine';
-osc.frequency.value = freq;
-gain.gain.value = 0.12;
+        function playTone(freq, duration, delay, waveType, volume) {
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            
+            osc.type = waveType || 'sine';
+            osc.frequency.value = freq;
+            
+            // ولوم روی 0.8 تنظیم شد (تا حداکثر 1.0 می‌تونید ببرین)
+            var maxVol = volume || 1.0; 
+            
+            var startAt = ctx.currentTime + (delay || 0);
+            
+            // تنظیم ولوم اولیه
+            gain.gain.setValueAtTime(maxVol, startAt);
+            // کم شدن نرم صدا تا انتهای بازه
+            gain.gain.linearRampToValueAtTime(0.01, startAt + duration);
 
-osc.connect(gain);
-gain.connect(ctx.destination);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
 
-var startAt = ctx.currentTime + (delay || 0);
-osc.start(startAt);
-gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
-osc.stop(startAt + duration);
-}
+            osc.start(startAt);
+            osc.stop(startAt + duration);
+        }
 
-if (type === 'success') {
-playTone(880, 0.1, 0, 'sine');
-playTone(1320, 0.18, 0.11, 'sine');
-setTimeout(function () { ctx.close(); }, 400);
-} else if (type === 'notFound') {
-playTone(200, 0.45, 0, 'sawtooth');
-setTimeout(function () { ctx.close(); }, 550);
-} else if (type === 'duplicate') {
-playTone(440, 0.12, 0, 'triangle');
-playTone(440, 0.12, 0.18, 'triangle');
-setTimeout(function () { ctx.close(); }, 450);
-}
-} catch (e) {}
+        if (type === 'success') {
+            // صدای موفقیت بلندتر و شفاف‌تر
+            playTone(880, 0.12, 0, 'sine', 0.9);
+            playTone(1320, 0.22, 0.11, 'sine', 0.9);
+            setTimeout(function () { ctx.close(); }, 500);
+        } else if (type === 'notFound') {
+            // صدای پیدا نشدن با قدرت بیشتر
+            playTone(220, 0.5, 0, 'sawtooth', 0.8);
+            setTimeout(function () { ctx.close(); }, 600);
+        } else if (type === 'duplicate') {
+            // صدای تکراری
+            playTone(587, 0.15, 0, 'triangle', 0.85);
+            playTone(587, 0.15, 0.18, 'triangle', 0.85);
+            setTimeout(function () { ctx.close(); }, 500);
+        }
+    } catch (e) {}
 }
 
 function normalizeName(name) {
