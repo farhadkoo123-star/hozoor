@@ -52,10 +52,17 @@ margin-bottom: 20px;
 color: #667eea;
 margin-bottom: 20px;
 }
-.file-input-wrapper, .button-group, .manual-row {
+.file-input-wrapper, .button-group {
 display: flex;
 gap: 10px;
 align-items: center;
+margin-bottom: 15px;
+flex-wrap: wrap;
+}
+.manual-row {
+display: flex;
+gap: 10px;
+align-items: stretch;
 margin-bottom: 15px;
 flex-wrap: wrap;
 }
@@ -163,13 +170,21 @@ padding: 15px;
 background: #edf2f7;
 border-radius: 8px;
 }
-.manual-row input[type="text"] {
+.manual-row textarea {
 flex: 1;
-min-width: 160px;
+min-width: 250px;
 padding: 12px;
 border: 2px solid #e2e8f0;
 border-radius: 8px;
 font-size: 15px;
+font-family: inherit;
+resize: vertical;
+min-height: 55px;
+line-height: 1.5;
+}
+.manual-row textarea:focus {
+outline: none;
+border-color: #667eea;
 }
 @media (max-width: 1024px) {
 .main-content { grid-template-columns: 1fr; }
@@ -211,8 +226,8 @@ font-size: 15px;
 <button type="button" class="btn-danger" id="clearBtn">پاک کردن لیست</button>
 </div>
 <div class="manual-row">
-<input type="text" id="manualName" placeholder="افزودن دستی نام...">
-<button type="button" class="btn-success" id="addManualBtn">افزودن</button>
+<textarea id="manualName" rows="2" placeholder="افزودن نام‌ها (هر خط یک نام - کلید میانبر: Ctrl+Enter)"></textarea>
+<button type="button" class="btn-success" id="addManualBtn">افزودن اسامی</button>
 </div>
 <div id="uploadMessage"></div>
 <div class="hint-box">
@@ -297,14 +312,10 @@ function playBeep(type) {
             osc.type = waveType || 'sine';
             osc.frequency.value = freq;
             
-            // ولوم روی 0.8 تنظیم شد (تا حداکثر 1.0 می‌تونید ببرین)
             var maxVol = volume || 1.0; 
-            
             var startAt = ctx.currentTime + (delay || 0);
             
-            // تنظیم ولوم اولیه
             gain.gain.setValueAtTime(maxVol, startAt);
-            // کم شدن نرم صدا تا انتهای بازه
             gain.gain.linearRampToValueAtTime(0.01, startAt + duration);
 
             osc.connect(gain);
@@ -315,16 +326,13 @@ function playBeep(type) {
         }
 
         if (type === 'success') {
-            // صدای موفقیت بلندتر و شفاف‌تر
             playTone(880, 0.12, 0, 'sine', 0.9);
             playTone(1320, 0.22, 0.11, 'sine', 0.9);
             setTimeout(function () { ctx.close(); }, 500);
         } else if (type === 'notFound') {
-            // صدای پیدا نشدن با قدرت بیشتر
             playTone(220, 0.5, 0, 'sawtooth', 0.8);
             setTimeout(function () { ctx.close(); }, 600);
         } else if (type === 'duplicate') {
-            // صدای تکراری
             playTone(587, 0.15, 0, 'triangle', 0.85);
             playTone(587, 0.15, 0.18, 'triangle', 0.85);
             setTimeout(function () { ctx.close(); }, 500);
@@ -332,12 +340,26 @@ function playBeep(type) {
     } catch (e) {}
 }
 
+// نرمال‌سازی با حفظ ساختار فاصله
 function normalizeName(name) {
 return String(name || '')
 .replace(/^\uFEFF/, '')
-.replace(/[\u200c\u200f\u202a-\u202e]/g, '')
+.replace(/[\u200c\u200f\u202a-\u202e]/g, ' ')
 .trim()
 .replace(/\s+/g, ' ')
+.toLowerCase();
+}
+
+// نرمال‌سازی فشرده (حذف کامل فاصله‌ها، نیم‌فاصله‌ها و یکسان‌سازی حروف فارسی/عربی)
+function compactName(name) {
+return String(name || '')
+.replace(/^\uFEFF/, '')
+.replace(/[\u064B-\u065F\u0670]/g, '') // حذف اعراب و تنوین
+.replace(/[\u200c\u200d\u200e\u200f\u202a-\u202e\s\-_.]/g, '') // حذف همه فاصله‌ها و کاراکترهای جداکننده
+.replace(/[ي]/g, 'ی')
+.replace(/[ك]/g, 'ک')
+.replace(/[آأإ]/g, 'ا')
+.replace(/[ة]/g, 'ه')
 .toLowerCase();
 }
 
@@ -408,8 +430,11 @@ return possibleNames
 .map(function (name) { return String(name).trim(); });
 }
 
+// جستجوی هوشمند نام در لیست (پشتیبانی کامل از فاصله‌دار بودن و نبودن)
 function findPersonByName(possibleNames) {
-var i, testName, normalizedTestName, person;
+var i, testName, normalizedTestName, compactTestName, person;
+
+// گام ۱: تطبیق دقیق با نرمال‌سازی معمولی
 for (i = 0; i < possibleNames.length; i++) {
 testName = possibleNames[i];
 normalizedTestName = normalizeName(testName);
@@ -419,13 +444,31 @@ person = allPersons.find(function (p) {
 return normalizeName(p.name) === normalizedTestName;
 });
 if (person) return person;
+}
+
+// گام ۲: تطبیق کامل بدون فاصله (مثلاً «علی‌رضا» با «علیرضا» یا «علی رضا»)
+for (i = 0; i < possibleNames.length; i++) {
+compactTestName = compactName(possibleNames[i]);
+if (!compactTestName || compactTestName.length < 2) continue;
 
 person = allPersons.find(function (p) {
-var pn = normalizeName(p.name);
-return pn.indexOf(normalizedTestName) !== -1 || normalizedTestName.indexOf(pn) !== -1;
+return compactName(p.name) === compactTestName;
 });
 if (person) return person;
 }
+
+// گام ۳: تطبیق شامل بودن (زیررشته) بدون در نظر گرفتن فاصله
+for (i = 0; i < possibleNames.length; i++) {
+compactTestName = compactName(possibleNames[i]);
+if (!compactTestName || compactTestName.length < 3) continue;
+
+person = allPersons.find(function (p) {
+var cp = compactName(p.name);
+return cp.indexOf(compactTestName) !== -1 || compactTestName.indexOf(cp) !== -1;
+});
+if (person) return person;
+}
+
 return null;
 }
 
@@ -571,15 +614,33 @@ reader.readAsText(file, 'UTF-8');
 
 function addManualName() {
 var input = $('manualName');
-var name = (input.value || '').trim();
-if (!name) {
-showUploadMessage('نام را وارد کنید', 'error');
+var text = (input.value || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+if (!text) {
+showUploadMessage('لطفاً حداقل یک نام وارد کنید', 'error');
 return;
 }
+
+var lines = text.split('\n')
+.map(function(l) { return l.trim(); })
+.filter(function(l) { return l.length > 0; });
+
+if (!lines.length) {
+showUploadMessage('نام معتبری یافت نشد', 'error');
+return;
+}
+
+lines.forEach(function(name) {
 allPersons.push({ name: name, present: false, time: null });
+});
+
 input.value = '';
 updateAllLists();
-showUploadMessage('«' + name + '» اضافه شد', 'success');
+
+if (lines.length === 1) {
+showUploadMessage('«' + lines[0] + '» اضافه شد', 'success');
+} else {
+showUploadMessage(lines.length + ' نام جدید با موفقیت اضافه شد', 'success');
+}
 }
 
 function loadSample() {
@@ -992,7 +1053,10 @@ $('sampleBtn').addEventListener('click', loadSample);
 $('clearBtn').addEventListener('click', clearList);
 $('addManualBtn').addEventListener('click', addManualName);
 $('manualName').addEventListener('keydown', function (e) {
-if (e.key === 'Enter') addManualName();
+if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+e.preventDefault();
+addManualName();
+}
 });
 $('startScanBtn').addEventListener('click', function () { startScanner(); });
 $('stopScanBtn').addEventListener('click', function () { stopScanner(); });
